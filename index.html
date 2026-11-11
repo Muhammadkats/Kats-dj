@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#171717">
+  <title>KATS DJ</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    * { box-sizing: border-box }
+    body { margin: 0; background: #111; color: #eee; font: 14px system-ui, sans-serif }
+    header { padding: 16px 20px; color: #e6bd60; border-bottom: 1px solid #514321 }
+    h1 { margin: 0; letter-spacing: .12em }
+    main { display: grid; grid-template-columns: repeat(2,minmax(300px,1fr)); gap: 12px; padding: 12px }
+    .deck { background: #202020; border: 1px solid #554622; border-radius: 12px; padding: 14px }
+    .deck h2 { color: #e6bd60; margin: 0 0 10px }
+    .controls, .stems { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0 }
+    button, .file { color: #f4d47b; background: #302a1c; border: 1px solid #806a35;
+      border-radius: 6px; padding: 8px 10px; cursor: pointer }
+    button:hover, .file:hover { background: #47391d }
+    input[type=file] { display: none }
+    .load { display: inline-block }
+    video { width: 100%; max-height: 170px; background: #090909; margin-top: 8px }
+    .wheel { width: 150px; height: 150px; margin: 10px auto; border-radius: 50%;
+      border: 8px solid #b9913e; background: repeating-radial-gradient(#292929 0 3px,#161616 4px 7px);
+      display: grid; place-items: center; color: #e6bd60; user-select: none; touch-action: none; cursor: grab }
+    .pads { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px }
+    .pads button { min-height: 40px }
+    .status { color: #aaa; min-height: 20px; overflow-wrap: anywhere }
+    @media(max-width:700px) { main { grid-template-columns: 1fr } }
+  </style>
+</head>
+<body>
+<header><h1>KATS DJ</h1><div>Four-deck audio & video starter</div></header>
+<main id="decks"></main>
+
+<script>
+const root = document.querySelector("#decks");
+const audioCtx = window.AudioContext ? new AudioContext() : null;
+const media = [];
+
+for (let n = 1; n <= 4; n++) {
+  const deck = document.createElement("section");
+  deck.className = "deck";
+  deck.innerHTML = `
+    <h2>K${n} <small>· KATS DJ</small></h2>
+    <label class="file">Load audio/video<input class="track" type="file" accept="audio/*,video/*"></label>
+    <div class="status">No track loaded</div>
+    <video controls playsinline></video>
+    <div class="controls">
+      <button class="play">Play / Pause</button><button class="stop">Stop</button>
+      <button class="cue">Cue</button><label>Speed <input class="speed" type="range" min=".5" max="1.5" step=".01" value="1"></label>
+    </div>
+    <div class="wheel" title="Drag to scratch">KATS DJ<br>JOG WHEEL</div>
+    <div class="stems">
+      <button>Vocal</button><button>Drums</button><button>Bass</button><button>Other</button>
+    </div>
+    <div class="pads"></div>`;
+  root.append(deck);
+
+  const video = deck.querySelector("video");
+  const status = deck.querySelector(".status");
+  media.push(video);
+
+  deck.querySelector(".track").addEventListener("change", e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    video.src = URL.createObjectURL(file);
+    status.textContent = file.name;
+  });
+  deck.querySelector(".play").onclick = async () => {
+    if (video.paused) { await video.play(); } else video.pause();
+  };
+  deck.querySelector(".stop").onclick = () => { video.pause(); video.currentTime = 0; };
+  deck.querySelector(".cue").onclick = () => { video.currentTime = 0; };
+  deck.querySelector(".speed").oninput = e => video.playbackRate = +e.target.value;
+
+  // Drag the jog wheel to scrub and briefly change playback speed.
+  const wheel = deck.querySelector(".wheel");
+  let lastX = 0, dragging = false;
+  wheel.addEventListener("pointerdown", e => {
+    dragging = true; lastX = e.clientX; wheel.setPointerCapture(e.pointerId);
+  });
+  wheel.addEventListener("pointermove", e => {
+    if (!dragging || !video.src) return;
+    const delta = e.clientX - lastX;
+    lastX = e.clientX;
+    video.currentTime = Math.max(0, video.currentTime + delta * .012);
+    video.playbackRate = delta >= 0 ? 1.15 : .85;
+  });
+  wheel.addEventListener("pointerup", () => {
+    dragging = false;
+    video.playbackRate = +deck.querySelector(".speed").value;
+  });
+
+  const pads = deck.querySelector(".pads");
+  for (let i = 1; i <= 12; i++) {
+    const label = document.createElement("label");
+    label.className = "file";
+    label.textContent = `Pad ${i}`;
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = "audio/*"; input.hidden = true;
+    input.onchange = () => {
+      const file = input.files[0];
+      if (!file) return;
+      label.textContent = `▶ ${file.name.slice(0, 12)}`;
+      label.onclick = () => {
+        const sample = new Audio(URL.createObjectURL(file));
+        sample.play();
+      };
+    };
+    label.append(input); pads.append(label);
+  }
+
+  deck.querySelectorAll(".stems button").forEach(button => {
+    button.onclick = () => {
+      button.classList.toggle("active");
+      status.textContent = "Stem controls are a UI placeholder; separation is not enabled.";
+    };
+  });
+}
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js"));
+}
+</script>
+</body>
+</html>
